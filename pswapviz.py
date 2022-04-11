@@ -40,10 +40,7 @@ class IterMoveList:
     def __init__(self, moves: list):
         self.moves = moves
         self.current = 0
-        self.first = (0, moves[0])
         self.max = len(moves)
-        print(self.max)
-        print(moves)
 
     def next(self):
         if(self.current >= self.max):
@@ -91,10 +88,12 @@ class RectDisplayWidget(Widget):
 
     def set_color(self, rank):
         # c = Color((1 - rank)/1.5, 1, 0.85, mode='hsv')
-        c = Color((1 - rank)/1.5, 1, 1, mode='hsv')  # gradient sympa
+        #c = Color((1 - rank)/1.25, 1, 1, mode='hsv')  # gradient sympa
         # c = Color(0, 0, (1 - rank)/1.5, mode='hsv') # black and white pas lisible
-        # c = Color(0, 0, 1 - (rank/1.25), mode='hsv') # good black and white
-        # c = Color(0, 0, (rank/1.5) + 0.25, mode='hsv')
+        #c = Color(0, 0, 1 - (rank/1.25), mode='hsv') # good black and white
+        c = Color(0, 0, (rank/1.5) + 0.25, mode='hsv') #black and white reverse
+        # c = Color(0.45, 0.5, 1 - (rank/1.25), mode='hsv') one color gradient to black
+        #c = Color(((rank)/1.25) + 0.25, (1 - rank)/1.25, (1 - rank)/1.25, mode='hsv') not good
         return c
 
     def get_rect_pos(self, pos_x, iter_y):
@@ -220,7 +219,6 @@ class RectDisplayWidget(Widget):
             self.do_move(self.iter_moves_list.next())
         except StopIteration:
             #self.dispatch('on_end_reached')
-            print("stooop !")
             self.pause_status = 1
             #self.event_play.cancel()
         self._move_trigger()
@@ -239,8 +237,14 @@ class RectDisplayWidget(Widget):
         #print('FPS: %2.4f (real draw: %d) (dt: %2.4f)' % (
         #    Clock.get_fps(), Clock.get_rfps(), dt))
 
-    def play_rev(self, *largs):
-        self.event_rev = Clock.schedule_interval(self.do_one_move_rev, 1.0/100.0)
+    def reset_stack(self, *largs):
+        self.pause_status = 1
+        self.stack_a = []
+        self.stack_b = []
+        self.canvas.clear()
+        self.iter_moves_list.current = 0
+        Clock.schedule_once(self.draw_rectangles)
+        #self.event_rev = Clock.schedule_interval(self.do_one_move_rev, 1.0/100.0)
 
     def on_pause_status(self, instance, value):
         if value == 0:
@@ -252,7 +256,6 @@ class RectDisplayWidget(Widget):
 
 class PushSwapVizApp(App):
     i = NumericProperty()
-    #pause_status = NumericProperty()
     speed = NumericProperty()
     stack_size = NumericProperty()
     total_count_var = NumericProperty()
@@ -268,7 +271,7 @@ class PushSwapVizApp(App):
         self.btn_step_rev = Button(text='-1◀', on_press=rect_display.do_one_move_rev)
         self.btn_step = Button(text='▶+1', on_press=rect_display.do_one_move)
         btn_reset = Button(text='↺ Reset',
-                           on_press=rect_display.play_rev)
+                           on_press=rect_display.reset_stack)
 
         layout = BoxLayout(size_hint=(1, None), height=50, spacing=10)
         layout.add_widget(self.btn_play)
@@ -279,25 +282,20 @@ class PushSwapVizApp(App):
         root.add_widget(rect_display)
         root.add_widget(layout)
 
-        rect_display.prepare(self.stack_a, self.moves)
+        rect_display.prepare(self.stack_orig, self.moves)
 
         return root
 
     def create_vars(self):
         self.i = 0
-        self.i_prev = 0
         self.i_count = 0
-        #self.pause_status = 1
         self.speed = 5.7
-        self.stack_size = self.stack_size
         self.create_stack()
         self.create_move_list()
         self.total_count_var = len(self.moves)
 
     def create_stack(self):
         self.generate_nblist(self.stack_size)
-        self.first_pile = self.stack_a[:]
-        self.stack_b = []
 
     def create_move_list(self):
         if self.push_swap == "":
@@ -318,11 +316,11 @@ class PushSwapVizApp(App):
         if self.continuous:
             up = (stack_size // 2) + (stack_size % 2)
             down = (stack_size // 2)
-            self.stack_a = random.sample(range(-down, up), stack_size)
+            self.stack_orig = random.sample(range(-down, up), stack_size)
         else:
-            self.stack_a = random.sample(range(-stack_size, stack_size),
+            self.stack_orig = random.sample(range(-stack_size, stack_size),
                                          stack_size)
-        self.argv = [str(int) for int in self.stack_a]
+        self.argv = [str(int) for int in self.stack_orig]
 
     def on_start(self):
         print(' '.join(self.argv))
@@ -330,14 +328,10 @@ class PushSwapVizApp(App):
     def pause_toggle(self, event):
         if self.rect_display.pause_status:
             self.rect_display.pause_status = 0
-            #self.btn_play.text = "||"
         else:
             self.rect_display.pause_status = 1
-            #self.btn_play.text = "▶"
-        #print('button font = ' + button.font_name)
 
     def play_updt(self, *largs):
-        print("blam", self.rect_display.pause_status)
         if self.rect_display.pause_status:
             self.btn_play.text = "▶"
         else:
