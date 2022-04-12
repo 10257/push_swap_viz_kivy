@@ -15,6 +15,7 @@ from kivy.properties import NumericProperty
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.graphics import Color, Rectangle
+from kivy.metrics import sp
 from kivy.lang import Builder
 from functools import partial
 
@@ -62,6 +63,8 @@ class IterMoveList:
 
 class RectDisplayWidget(Widget):
     pause_status = NumericProperty(1)
+    speed_ratio = NumericProperty(10.0)
+    moves_total = NumericProperty(0)
 
     def __init__(self, **kwargs):
         #self.register_event_type('on_end_reached')
@@ -79,7 +82,7 @@ class RectDisplayWidget(Widget):
         self.stack_len = len(stack)
         self.moves_list = moves_list
         self.iter_moves_list = IterMoveList(self.moves_list)
-        self.nb_moves = len(moves_list)
+        self.moves_total = self.iter_moves_list.max
         if (self.stack_len != 0):
             self.max = max(stack)
             self.min = min(stack)
@@ -90,9 +93,9 @@ class RectDisplayWidget(Widget):
         #c = Color((1 - rank)/1.25, 1, 1, mode='hsv')  # gradient sympa
         # c = Color(0, 0, (1 - rank)/1.5, mode='hsv') # black and white pas lisible
         #c = Color(0, 0, 1 - (rank/1.25), mode='hsv') # good black and white
-        c = Color(0, 0, (rank/1.5) + 0.25, mode='hsv') #black and white reverse
-        # c = Color(0.45, 0.5, 1 - (rank/1.25), mode='hsv') one color gradient to black
-        #c = Color(((rank)/1.25) + 0.25, (1 - rank)/1.25, (1 - rank)/1.25, mode='hsv') not good
+        #c = Color(0, 0, (rank/1.5) + 0.25, mode='hsv') #black and white reverse
+        c = Color(1, .75, 1 - (rank/1.25), mode='hsv') #one color gradient to black
+        #c = Color(((rank)/1.25) + 0.25, (1 - rank)/1.25, (1 - rank)/1.25, mode='hsv') #not good
         return c
 
     def get_rect_pos(self, pos_x, iter_y):
@@ -209,9 +212,7 @@ class RectDisplayWidget(Widget):
         except StopIteration:
             #self.dispatch('on_end_reached')
             self.pause_status = 1
-            #self.event_play.cancel()
         self._move_trigger()
-        #print("bip")
         #print('FPS: %2.4f (real draw: %d) (dt: %2.4f)' % (
         #    Clock.get_fps(), Clock.get_rfps(), dt))
 
@@ -221,7 +222,6 @@ class RectDisplayWidget(Widget):
         except StopIteration:
             self.pause_status = 1
             #self.dispatch('on_end_reached')
-            #self.event_rev.cancel()
         self._move_trigger()
         #print('FPS: %2.4f (real draw: %d) (dt: %2.4f)' % (
         #    Clock.get_fps(), Clock.get_rfps(), dt))
@@ -238,14 +238,19 @@ class RectDisplayWidget(Widget):
     def on_pause_status(self, instance, value):
         if value == 0:
             self.event_play = Clock.schedule_interval(
-                self.do_one_move, 1.0/1000.0)
+                self.do_one_move, 1.0/self.speed_ratio)
         else:
             self.event_play.cancel()
+
+    def on_speed_ratio(self, instance, speed_ratio):
+        if self.pause_status == 0:
+            self.event_play.cancel()
+            self.event_play = Clock.schedule_interval(
+                    self.do_one_move, 1.0/speed_ratio)
 
 
 class PushSwapVizApp(App):
     i = NumericProperty()
-    speed = NumericProperty()
     stack_size = NumericProperty()
     total_count_var = NumericProperty()
 
@@ -262,14 +267,24 @@ class PushSwapVizApp(App):
                                    on_press=rect_display.do_one_move_rev)
         self.btn_step = Button(text='▶+1', size_hint=(.25, 1),
                                on_press=rect_display.do_one_move)
-        btn_reset = Button(text='↺ Reset',
-                           on_press=rect_display.reset_stack)
+        self.btn_reset = Button(text='↺ Reset', size_hint=(.25, 1),
+                                on_press=rect_display.reset_stack)
+        self.slider_speed = Slider(min=1, max=150, pos_hint={'center_y': .55},
+                                   cursor_size=(sp(20), sp(20)),
+                                   value=rect_display.speed_ratio)
+        self.speed_label = Label(text='Speed', size_hint=(.25, 1))
+        self.slider_speed.bind(value=self.on_speed_update)
+        self.moves_label = Label(text='Moves', size_hint=(.5, 1))
+        rect_display.bind(moves_total=self.on_moves_label)
 
         layout = BoxLayout(size_hint=(1, None), height=50, spacing=5)
         layout.add_widget(self.btn_play)
         layout.add_widget(self.btn_step_rev)
         layout.add_widget(self.btn_step)
-        layout.add_widget(btn_reset)
+        layout.add_widget(self.btn_reset)
+        layout.add_widget(self.speed_label)
+        layout.add_widget(self.slider_speed)
+        layout.add_widget(self.moves_label)
         self.root = root = BoxLayout(orientation='vertical')
         root.add_widget(rect_display)
         root.add_widget(layout)
@@ -311,11 +326,17 @@ class PushSwapVizApp(App):
             self.stack_orig = random.sample(range(-down, up), stack_size)
         else:
             self.stack_orig = random.sample(range(-stack_size, stack_size),
-                                         stack_size)
+                                            stack_size)
         self.argv = [str(int) for int in self.stack_orig]
 
     def on_start(self):
         print(' '.join(self.argv))
+
+    def on_speed_update(self, instance, speed_ratio):
+        self.rect_display.speed_ratio = speed_ratio
+
+    def on_moves_label(self, instance, moves_total):
+        self.moves_label.text = "Nb Moves: {}".format(moves_total)
 
     def pause_toggle(self, event):
         if self.rect_display.pause_status:
