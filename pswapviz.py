@@ -6,10 +6,9 @@ import subprocess
 os.environ["KIVY_NO_ARGS"] = "1"
 os.environ["KIVY_NO_FILELOG"] = "1"
 #os.environ["KIVY_NO_CONSOLELOG"] = "1"
-#from kivy.config import Config
-#Config.set('graphics', 'maxfps', '0')
-from kivy.uix.button import Button
 from kivy.uix.widget import Widget
+from kivy.uix.button import Button
+from kivy.uix.slider import Slider
 from kivy.uix.label import Label
 from kivy.uix.boxlayout import BoxLayout
 from kivy.properties import NumericProperty
@@ -150,44 +149,34 @@ class RectDisplayWidget(Widget):
     def do_move(self, move):
         if move == 'sa' and len(self.stack_a) >= 2:
             self.stack_a[0], self.stack_a[1] = self.stack_a[1], self.stack_a[0]
-        if move == 'sb' and len(self.stack_b) >= 2:
+        elif move == 'sb' and len(self.stack_b) >= 2:
             self.stack_b[0], self.stack_b[1] = self.stack_b[1], self.stack_b[0]
-        if move == 'ss':
-            if (len(self.stack_a) >= 2):
-                self.stack_a[0], self.stack_a[1] = self.stack_a[1], self.stack_a[0]
-            if (len(self.stack_b) >= 2):
-                self.stack_b[0], self.stack_b[1] = self.stack_b[1], self.stack_b[0]
-        if move == 'ra' and len(self.stack_a) >= 2:
+        elif move == 'ss':
+            self.do_move('sa')
+            self.do_move('sb')
+        elif move == 'ra' and len(self.stack_a) >= 2:
             self.stack_a.append(self.stack_a[0])
             del self.stack_a[0]
-        if move == 'rb' and len(self.stack_b) >= 2:
+        elif move == 'rb' and len(self.stack_b) >= 2:
             self.stack_b.append(self.stack_b[0])
             del self.stack_b[0]
-        if move == 'rr':
-            if (len(self.stack_a) >= 2):
-                self.stack_a.append(self.stack_a[0])
-                del self.stack_a[0]
-            if (len(self.stack_b) >= 2):
-                self.stack_b.append(self.stack_b[0])
-                del self.stack_b[0]
-        if move == 'rra' and len(self.stack_a) >= 2:
-            self.stack_a = [self.stack_a[-1]] + self.stack_a
+        elif move == 'rr':
+            self.do_move('ra')
+            self.do_move('rb')
+        elif move == 'rra' and len(self.stack_a) >= 2:
+            self.stack_a.insert(0, self.stack_a[-1])
             del self.stack_a[-1]
-        if move == 'rrb' and len(self.stack_b) >= 2:
-            self.stack_b = [self.stack_b[-1]] + self.stack_b
+        elif move == 'rrb' and len(self.stack_b) >= 2:
+            self.stack_b.insert(0, self.stack_b[-1])
             del self.stack_b[-1]
-        if move == 'rrr':
-            if (len(self.stack_a) >= 2):
-                self.stack_a = [self.stack_a[-1]] + self.stack_a
-                del self.stack_a[-1]
-            if (len(self.stack_b) >= 2):
-                self.stack_b = [self.stack_b[-1]] + self.stack_b
-                del self.stack_b[-1]
-        if move == 'pa' and len(self.stack_b) >= 1:
-            self.stack_a = [self.stack_b[0]] + self.stack_a
+        elif move == 'rrr':
+            self.do_move('rra')
+            self.do_move('rrb')
+        elif move == 'pa' and len(self.stack_b) >= 1:
+            self.stack_a.insert(0, self.stack_b[0])
             del self.stack_b[0]
-        if move == 'pb' and len(self.stack_a) >= 1:
-            self.stack_b = [self.stack_a[0]] + self.stack_b
+        elif move == 'pb' and len(self.stack_a) >= 1:
+            self.stack_b.insert(0, self.stack_a[0])
             del self.stack_a[0]
 
     def do_move_rev(self, move):
@@ -249,7 +238,7 @@ class RectDisplayWidget(Widget):
     def on_pause_status(self, instance, value):
         if value == 0:
             self.event_play = Clock.schedule_interval(
-                self.do_one_move, 1.0/100.0)
+                self.do_one_move, 1.0/1000.0)
         else:
             self.event_play.cancel()
 
@@ -267,13 +256,16 @@ class PushSwapVizApp(App):
         self.create_vars()
         self.rect_display = rect_display = RectDisplayWidget()
         rect_display.bind(pause_status=self.play_updt)
-        self.btn_play = Button(text='▶', on_press=self.pause_toggle)
-        self.btn_step_rev = Button(text='-1◀', on_press=rect_display.do_one_move_rev)
-        self.btn_step = Button(text='▶+1', on_press=rect_display.do_one_move)
+        self.btn_play = Button(text='▶', size_hint=(.25, 1),
+                               on_press=self.pause_toggle)
+        self.btn_step_rev = Button(text='-1◀', size_hint=(.25, 1),
+                                   on_press=rect_display.do_one_move_rev)
+        self.btn_step = Button(text='▶+1', size_hint=(.25, 1),
+                               on_press=rect_display.do_one_move)
         btn_reset = Button(text='↺ Reset',
                            on_press=rect_display.reset_stack)
 
-        layout = BoxLayout(size_hint=(1, None), height=50, spacing=10)
+        layout = BoxLayout(size_hint=(1, None), height=50, spacing=5)
         layout.add_widget(self.btn_play)
         layout.add_widget(self.btn_step_rev)
         layout.add_widget(self.btn_step)
