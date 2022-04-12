@@ -181,27 +181,27 @@ class RectDisplayWidget(Widget):
 
     def do_move_rev(self, move):
         if move == 'sa':
-            return self.do_move('sa')
-        if move == 'sb':
-            return self.do_move('sb')
-        if move == 'ss':
-            return self.do_move('ss')
-        if move == 'ra':
-            return self.do_move('rra')
-        if move == 'rb':
-            return self.do_move('rrb')
-        if move == 'rr':
-            return self.do_move('rrr')
-        if move == 'rra':
-            return self.do_move('ra')
-        if move == 'rrb':
-            return self.do_move('rb')
-        if move == 'rrr':
-            return self.do_move('rr')
-        if move == 'pa':
-            return self.do_move('pb')
-        if move == 'pb':
-            return self.do_move('pa')
+            self.do_move('sa')
+        elif move == 'sb':
+            self.do_move('sb')
+        elif move == 'ss':
+            self.do_move('ss')
+        elif move == 'ra':
+            self.do_move('rra')
+        elif move == 'rb':
+            self.do_move('rrb')
+        elif move == 'rr':
+            self.do_move('rrr')
+        elif move == 'rra':
+            self.do_move('ra')
+        elif move == 'rrb':
+            self.do_move('rb')
+        elif move == 'rrr':
+            self.do_move('rr')
+        elif move == 'pa':
+            self.do_move('pb')
+        elif move == 'pb':
+            self.do_move('pa')
 
     def do_one_move(self, dt, *largs):
         try:
