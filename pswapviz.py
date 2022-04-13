@@ -3,6 +3,7 @@ import sys
 import getopt
 import random
 import subprocess
+import itertools
 os.environ["KIVY_NO_ARGS"] = "1"
 os.environ["KIVY_NO_FILELOG"] = "1"
 #os.environ["KIVY_NO_CONSOLELOG"] = "1"
@@ -15,7 +16,7 @@ from kivy.properties import NumericProperty
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.graphics import Color, Rectangle
-from kivy.metrics import sp
+from kivy.metrics import sp, dp
 from kivy.lang import Builder
 from functools import partial
 
@@ -33,7 +34,7 @@ class StackRectangle:
     def __init__(self, number, rank, pos, size):
         self.number = number
         self.rank = rank
-        self.rect = Rectangle(pos=pos, size=size)
+        self.rect = Rectangle(pos=pos, size=size, ttt=8)
 
 
 class IterMoveList:
@@ -47,7 +48,7 @@ class IterMoveList:
             raise StopIteration
         if self.current <= -1:
             self.current = 0
-        move = self.moves[self.current]
+        move = (self.current, self.moves[self.current])
         self.current += 1
         return move
 
@@ -57,14 +58,39 @@ class IterMoveList:
         self.current -= 1
         if self.current >= self.max:
             self.current = self.max - 1
-        move = self.moves[self.current]
+        move = (self.current, self.moves[self.current])
         return move
+
+class ProgressSlider(Slider):
+    def __init__(self, **kwargs):
+        self.register_event_type('on_release')
+        self.register_event_type('on_grab')
+        super(ProgressSlider, self).__init__(**kwargs)
+
+    def on_release(self):
+        pass
+
+    def on_grab(self):
+        pass
+
+    def on_touch_down(self, touch):
+        super(ProgressSlider, self).on_touch_down(touch)
+        if touch.grab_current != self:
+            self.dispatch('on_grab')
+            return True
+
+    def on_touch_up(self, touch):
+        super(ProgressSlider, self).on_touch_up(touch)
+        if touch.grab_current == self:
+            self.dispatch('on_release')
+            return True
 
 
 class RectDisplayWidget(Widget):
     pause_status = NumericProperty(1)
     speed_ratio = NumericProperty(10.0)
     moves_total = NumericProperty(0)
+    current_move_id = NumericProperty(0)
 
     def __init__(self, **kwargs):
         #self.register_event_type('on_end_reached')
@@ -208,7 +234,9 @@ class RectDisplayWidget(Widget):
 
     def do_one_move(self, dt, *largs):
         try:
-            self.do_move(self.iter_moves_list.next())
+            move = self.iter_moves_list.next()
+            self.do_move(move[1])
+            self.current_move_id = move[0]
         except StopIteration:
             #self.dispatch('on_end_reached')
             self.pause_status = 1
@@ -218,13 +246,35 @@ class RectDisplayWidget(Widget):
 
     def do_one_move_rev(self, dt, *largs):
         try:
-            self.do_move_rev(self.iter_moves_list.prev())
+            move = self.iter_moves_list.prev()
+            self.do_move_rev(move[1])
+            self.current_move_id = move[0]
         except StopIteration:
             self.pause_status = 1
             #self.dispatch('on_end_reached')
         self._move_trigger()
         #print('FPS: %2.4f (real draw: %d) (dt: %2.4f)' % (
         #    Clock.get_fps(), Clock.get_rfps(), dt))
+    
+    def do_multi_move(self, limit):
+        count = limit - self.current_move_id
+        move_id = 0
+        for _ in itertools.repeat(None, count):
+            move = self.iter_moves_list.next()
+            self.do_move(move[1])
+            move_id = move[0]
+        self.current_move_id = move[0]
+        self._move_trigger()
+
+    def do_multi_move_rev(self, limit):
+        count = self.current_move_id - limit 
+        move_id = 0
+        for _ in itertools.repeat(None, count):
+            move = self.iter_moves_list.prev()
+            self.do_move_rev(move[1])
+            move_id = move[0]
+        self.current_move_id = move[0]
+        self._move_trigger()
 
     def reset_stack(self, *largs):
         self.pause_status = 1
@@ -232,6 +282,7 @@ class RectDisplayWidget(Widget):
         self.stack_b = []
         self.canvas.clear()
         self.iter_moves_list.current = 0
+        self.current_move_id = 0
         Clock.schedule_once(self.draw_rectangles)
         #self.event_rev = Clock.schedule_interval(self.do_one_move_rev, 1.0/100.0)
 
@@ -250,9 +301,7 @@ class RectDisplayWidget(Widget):
 
 
 class PushSwapVizApp(App):
-    i = NumericProperty()
     stack_size = NumericProperty()
-    total_count_var = NumericProperty()
 
     def build(self):
         Builder.load_string(KV)
@@ -261,45 +310,74 @@ class PushSwapVizApp(App):
         self.create_vars()
         self.rect_display = rect_display = RectDisplayWidget()
         rect_display.bind(pause_status=self.play_updt)
-        self.btn_play = Button(text='▶', size_hint=(.25, 1),
+        self.btn_play = Button(text='▶', size_hint=(.2, 1), size_hint_min_x=dp(50),
                                on_press=self.pause_toggle)
-        self.btn_step_rev = Button(text='-1◀', size_hint=(.25, 1),
+        self.btn_step_rev = Button(text='-1◀', size_hint=(.2, 1), size_hint_min_x=dp(60),
                                    on_press=rect_display.do_one_move_rev)
-        self.btn_step = Button(text='▶+1', size_hint=(.25, 1),
+        self.btn_step = Button(text='▶+1', size_hint=(.2, 1), size_hint_min_x=dp(60),
                                on_press=rect_display.do_one_move)
-        self.btn_reset = Button(text='↺ Reset', size_hint=(.25, 1),
+        self.btn_reset = Button(text='↺ Reset', size_hint=(.25, 1), size_hint_min_x=dp(80),
                                 on_press=rect_display.reset_stack)
         self.slider_speed = Slider(min=1, max=150, pos_hint={'center_y': .55},
+                                   size_hint=(.5, 1), step=10,
                                    cursor_size=(sp(20), sp(20)),
-                                   value=rect_display.speed_ratio)
+                                   value=rect_display.speed_ratio,
+                                   background_width=dp(24))
         self.speed_label = Label(text='Speed', size_hint=(.25, 1))
         self.slider_speed.bind(value=self.on_speed_update)
-        self.moves_label = Label(text='Moves', size_hint=(.5, 1))
+        self.progress_label = Label(text='0', size_hint=(.2, 1))
+        self.moves_label = Label(text='0', size_hint=(.2, 1))
         rect_display.bind(moves_total=self.on_moves_label)
+        rect_display.prepare(self.stack_orig, self.moves)
+        self.slider_progress = ProgressSlider(min=0, max=rect_display.moves_total - 1,
+                                      pos_hint={'center_y': .55}, step=1,
+                                      cursor_size=(dp(20), dp(20)),
+                                      value_track=True, value_track_color=[1, 0, 0, 1],
+                                      value_track_width=dp(2),
+                                      background_width=dp(24))
+        rect_display.bind(current_move_id=self.update_progress_callback)
+        self.slider_progress.bind(value=self.update_move_progress_callback)
+        self.slider_progress.bind(on_release=self.release_progress_callback)
+        self.slider_progress.bind(on_grab=self.grab_progress_callback)
 
-        layout = BoxLayout(size_hint=(1, None), height=50, spacing=5)
-        layout.add_widget(self.btn_play)
-        layout.add_widget(self.btn_step_rev)
-        layout.add_widget(self.btn_step)
-        layout.add_widget(self.btn_reset)
-        layout.add_widget(self.speed_label)
-        layout.add_widget(self.slider_speed)
-        layout.add_widget(self.moves_label)
+        progress_pane = BoxLayout(size_hint=(1, None), height=dp(30), spacing=dp(2))
+        progress_pane.add_widget(self.progress_label)
+        progress_pane.add_widget(self.slider_progress)
+        progress_pane.add_widget(self.moves_label)
+        ctrl_btns = BoxLayout(size_hint=(1, None), height=dp(30), spacing=dp(2))
+        ctrl_btns.add_widget(self.btn_play)
+        ctrl_btns.add_widget(self.btn_step_rev)
+        ctrl_btns.add_widget(self.btn_step)
+        ctrl_btns.add_widget(self.btn_reset)
+        ctrl_btns.add_widget(self.speed_label)
+        ctrl_btns.add_widget(self.slider_speed)
         self.root = root = BoxLayout(orientation='vertical')
         root.add_widget(rect_display)
-        root.add_widget(layout)
-
-        rect_display.prepare(self.stack_orig, self.moves)
+        root.add_widget(progress_pane)
+        root.add_widget(ctrl_btns)
 
         return root
 
+    def update_progress_callback(self, instance, value):
+        self.slider_progress.value = value
+        self.progress_label.text = str(int(value))
+
+    def release_progress_callback(self, instance):
+        self.rect_display.pause_status = instance.pause_prev  
+
+    def grab_progress_callback(self, instance):
+        instance.pause_prev = self.rect_display.pause_status
+        self.rect_display.pause_status = 1
+
+    def update_move_progress_callback(self, instance, value):
+        if int(value) > self.rect_display.current_move_id:
+            self.rect_display.do_multi_move(int(value))
+        elif int(value) < self.rect_display.current_move_id:
+            self.rect_display.do_multi_move_rev(int(value))
+
     def create_vars(self):
-        self.i = 0
-        self.i_count = 0
-        self.speed = 5.7
         self.create_stack()
         self.create_move_list()
-        self.total_count_var = len(self.moves)
 
     def create_stack(self):
         self.generate_nblist(self.stack_size)
@@ -336,7 +414,7 @@ class PushSwapVizApp(App):
         self.rect_display.speed_ratio = speed_ratio
 
     def on_moves_label(self, instance, moves_total):
-        self.moves_label.text = "Nb Moves: {}".format(moves_total)
+        self.moves_label.text = "{}".format(moves_total)
 
     def pause_toggle(self, event):
         if self.rect_display.pause_status:
@@ -374,9 +452,11 @@ class PushSwapVizApp(App):
                     self.print_usage_exit(2)
             elif opt in ("-p", "--push-swap"):
                 self.push_swap = arg
+            else:
+                self.print_usage_exit(2)
 
     def print_usage_exit(self, status):
-        print('python3 pyviz.py -- [-c] [-s <stack_size>] [-p <push_swap_path>]\n')
+        print('python3 pyviz.py [-c] [-s <stack_size>] [-p <push_swap_path>]\n')
         print(' -h, --help')
         print('\tPrint this help dialog\n')
         print(' -c, --continuous')
@@ -394,5 +474,4 @@ class PushSwapVizApp(App):
 
 
 if __name__ == "__main__":
-    gui = PushSwapVizApp()
-    gui.run()
+    PushSwapVizApp().run()
