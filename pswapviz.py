@@ -61,6 +61,7 @@ class IterMoveList:
         move = (self.current, self.moves[self.current])
         return move
 
+
 class ProgressSlider(Slider):
     def __init__(self, **kwargs):
         self.register_event_type('on_release')
@@ -184,29 +185,23 @@ class RectDisplayWidget(Widget):
             self.do_move('sa')
             self.do_move('sb')
         elif move == 'ra' and len(self.stack_a) >= 2:
-            self.stack_a.append(self.stack_a[0])
-            del self.stack_a[0]
+            self.stack_a.append(self.stack_a.pop(0))
         elif move == 'rb' and len(self.stack_b) >= 2:
-            self.stack_b.append(self.stack_b[0])
-            del self.stack_b[0]
+            self.stack_b.append(self.stack_b.pop(0))
         elif move == 'rr':
             self.do_move('ra')
             self.do_move('rb')
         elif move == 'rra' and len(self.stack_a) >= 2:
-            self.stack_a.insert(0, self.stack_a[-1])
-            del self.stack_a[-1]
+            self.stack_a.insert(0, self.stack_a.pop())
         elif move == 'rrb' and len(self.stack_b) >= 2:
-            self.stack_b.insert(0, self.stack_b[-1])
-            del self.stack_b[-1]
+            self.stack_b.insert(0, self.stack_b.pop())
         elif move == 'rrr':
             self.do_move('rra')
             self.do_move('rrb')
         elif move == 'pa' and len(self.stack_b) >= 1:
-            self.stack_a.insert(0, self.stack_b[0])
-            del self.stack_b[0]
+            self.stack_a.insert(0, self.stack_b.pop(0))
         elif move == 'pb' and len(self.stack_a) >= 1:
-            self.stack_b.insert(0, self.stack_a[0])
-            del self.stack_a[0]
+            self.stack_b.insert(0, self.stack_a.pop(0))
 
     def do_move_rev(self, move):
         if move == 'sa':
@@ -255,24 +250,20 @@ class RectDisplayWidget(Widget):
         self._move_trigger()
         #print('FPS: %2.4f (real draw: %d) (dt: %2.4f)' % (
         #    Clock.get_fps(), Clock.get_rfps(), dt))
-    
+
     def do_multi_move(self, limit):
         count = limit - self.current_move_id
-        move_id = 0
         for _ in itertools.repeat(None, count):
             move = self.iter_moves_list.next()
             self.do_move(move[1])
-            move_id = move[0]
         self.current_move_id = move[0]
         self._move_trigger()
 
     def do_multi_move_rev(self, limit):
-        count = self.current_move_id - limit 
-        move_id = 0
+        count = self.current_move_id - limit
         for _ in itertools.repeat(None, count):
             move = self.iter_moves_list.prev()
             self.do_move_rev(move[1])
-            move_id = move[0]
         self.current_move_id = move[0]
         self._move_trigger()
 
@@ -310,14 +301,18 @@ class PushSwapVizApp(App):
         self.create_vars()
         self.rect_display = rect_display = RectDisplayWidget()
         rect_display.bind(pause_status=self.play_updt)
-        self.btn_play = Button(text='▶', size_hint=(.2, 1), size_hint_min_x=dp(50),
-                               on_press=self.pause_toggle)
-        self.btn_step_rev = Button(text='-1◀', size_hint=(.2, 1), size_hint_min_x=dp(60),
-                                   on_press=rect_display.do_one_move_rev)
-        self.btn_step = Button(text='▶+1', size_hint=(.2, 1), size_hint_min_x=dp(60),
-                               on_press=rect_display.do_one_move)
-        self.btn_reset = Button(text='↺ Reset', size_hint=(.25, 1), size_hint_min_x=dp(80),
-                                on_press=rect_display.reset_stack)
+        self.btn_play = Button(
+            text='▶', size_hint=(.2, 1), size_hint_min_x=dp(50),
+            on_press=self.pause_toggle)
+        self.btn_step_rev = Button(
+            text='-1◀', size_hint=(.2, 1), size_hint_min_x=dp(60),
+            on_press=rect_display.do_one_move_rev)
+        self.btn_step = Button(
+            text='▶+1', size_hint=(.2, 1), size_hint_min_x=dp(60),
+            on_press=rect_display.do_one_move)
+        self.btn_reset = Button(
+            text='↺ Reset', size_hint=(.25, 1), size_hint_min_x=dp(80),
+            on_press=rect_display.reset_stack)
         self.slider_speed = Slider(min=1, max=150, pos_hint={'center_y': .55},
                                    size_hint=(.5, 1), step=10,
                                    cursor_size=(sp(20), sp(20)),
@@ -329,22 +324,23 @@ class PushSwapVizApp(App):
         self.moves_label = Label(text='0', size_hint=(.2, 1))
         rect_display.bind(moves_total=self.on_moves_label)
         rect_display.prepare(self.stack_orig, self.moves)
-        self.slider_progress = ProgressSlider(min=0, max=rect_display.moves_total - 1,
-                                      pos_hint={'center_y': .55}, step=1,
-                                      cursor_size=(dp(20), dp(20)),
-                                      value_track=True, value_track_color=[1, 0, 0, 1],
-                                      value_track_width=dp(2),
-                                      background_width=dp(24))
+        self.slider_progress = ProgressSlider(
+            min=0, max=rect_display.moves_total - 1, pos_hint={'center_y': .5},
+            step=1, cursor_size=(dp(20), dp(20)),
+            value_track=True, value_track_color=[1, 0, 0, 1],
+            value_track_width=dp(2), background_width=dp(24))
         rect_display.bind(current_move_id=self.update_progress_callback)
         self.slider_progress.bind(value=self.update_move_progress_callback)
         self.slider_progress.bind(on_release=self.release_progress_callback)
         self.slider_progress.bind(on_grab=self.grab_progress_callback)
 
-        progress_pane = BoxLayout(size_hint=(1, None), height=dp(30), spacing=dp(2))
+        progress_pane = BoxLayout(
+            size_hint=(1, None), height=dp(30), spacing=dp(2))
         progress_pane.add_widget(self.progress_label)
         progress_pane.add_widget(self.slider_progress)
         progress_pane.add_widget(self.moves_label)
-        ctrl_btns = BoxLayout(size_hint=(1, None), height=dp(30), spacing=dp(2))
+        ctrl_btns = BoxLayout(
+            size_hint=(1, None), height=dp(30), spacing=dp(2))
         ctrl_btns.add_widget(self.btn_play)
         ctrl_btns.add_widget(self.btn_step_rev)
         ctrl_btns.add_widget(self.btn_step)
