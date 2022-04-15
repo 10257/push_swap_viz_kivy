@@ -4,6 +4,8 @@ import getopt
 import random
 import subprocess
 import itertools
+import argparse
+import pathlib
 os.environ["KIVY_NO_ARGS"] = "1"
 os.environ["KIVY_NO_FILELOG"] = "1"
 #os.environ["KIVY_NO_CONSOLELOG"] = "1"
@@ -424,11 +426,33 @@ class PushSwapVizApp(App):
         else:
             self.btn_play.text = "||"
 
+    def valid_path(self, path):
+        tmp_path = pathlib.Path(path)
+        if tmp_path.exists():
+            return tmp_path
+        else:
+            raise argparse.ArgumentTypeError(f"Given Path({path}) is not a valid path.")
+
     def parse_cmdline(self, argv):
         self.stack_size = 100
         self.push_swap = ""
         self.continuous = False
-        try:
+        parser = argparse.ArgumentParser()
+        parser.add_argument('integers', metavar='Number', type=int, nargs='*',
+                    help='List of custom numbers for push_swap')
+        parser.add_argument("-s", "--stack-size", metavar='size', type=int, default=100,
+                    help='Size of the stack of number (ex: 3 or 5 or 100 or 500)\
+                     default 100.')
+        parser.add_argument("-c", "--continuous", action='store_true', default=False,
+                    help='The number generated are folowing each other by a "1" increment.')
+        parser.add_argument("-p", "--push-swap", metavar='path', type=self.valid_path,
+                    help='The absolute or relative path to your push_swap folder or binary')
+
+        self.cmdline_args = parser.parse_args()
+        print(self.cmdline_args.integers)
+        print(self.cmdline_args.push_swap)
+        sys.exit(2)
+        """ try:
             opts, args = getopt.getopt(argv, "hcs:p:",
                                        ["help", "continous",
                                         "stack-size=", "push-swap="])
@@ -449,7 +473,7 @@ class PushSwapVizApp(App):
             elif opt in ("-p", "--push-swap"):
                 self.push_swap = arg
             else:
-                self.print_usage_exit(2)
+                self.print_usage_exit(2) """
 
     def print_usage_exit(self, status):
         print('python3 pyviz.py [-c] [-s <stack_size>] [-p <push_swap_path>]\n')
