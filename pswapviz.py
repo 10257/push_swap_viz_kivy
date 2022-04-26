@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+
+
 import os
 import sys
 import getopt
@@ -91,9 +94,9 @@ class ProgressSlider(Slider):
 
 class RectDisplayWidget(Widget):
     pause_status = NumericProperty(1)
-    speed_ratio = NumericProperty(10.0)
+    speed_ratio = NumericProperty(5.0)
     moves_total = NumericProperty(0)
-    current_move_id = NumericProperty(0)
+    current_move_id = NumericProperty(-1)
 
     def __init__(self, **kwargs):
         #self.register_event_type('on_end_reached')
@@ -237,6 +240,7 @@ class RectDisplayWidget(Widget):
         except StopIteration:
             #self.dispatch('on_end_reached')
             self.pause_status = 1
+            self.current_move_id = self.moves_total
         self._move_trigger()
         #print('FPS: %2.4f (real draw: %d) (dt: %2.4f)' % (
         #    Clock.get_fps(), Clock.get_rfps(), dt))
@@ -248,25 +252,32 @@ class RectDisplayWidget(Widget):
             self.current_move_id = move[0]
         except StopIteration:
             self.pause_status = 1
+            self.current_move_id = -1
             #self.dispatch('on_end_reached')
         self._move_trigger()
         #print('FPS: %2.4f (real draw: %d) (dt: %2.4f)' % (
         #    Clock.get_fps(), Clock.get_rfps(), dt))
 
     def do_multi_move(self, limit):
-        count = limit - self.current_move_id
-        for _ in itertools.repeat(None, count):
-            move = self.iter_moves_list.next()
-            self.do_move(move[1])
-        self.current_move_id = move[0]
+        try:
+            count = limit - self.current_move_id
+            for _ in itertools.repeat(None, count):
+                move = self.iter_moves_list.next()
+                self.do_move(move[1])
+            self.current_move_id = move[0]
+        except StopIteration:
+            self.current_move_id = self.moves_total
         self._move_trigger()
 
     def do_multi_move_rev(self, limit):
-        count = self.current_move_id - limit
-        for _ in itertools.repeat(None, count):
-            move = self.iter_moves_list.prev()
-            self.do_move_rev(move[1])
-        self.current_move_id = move[0]
+        try:
+            count = self.current_move_id - limit
+            for _ in itertools.repeat(None, count):
+                move = self.iter_moves_list.prev()
+                self.do_move_rev(move[1])
+            self.current_move_id = move[0]
+        except StopIteration:
+            self.current_move_id = -1
         self._move_trigger()
 
     def reset_stack(self, *largs):
@@ -275,14 +286,14 @@ class RectDisplayWidget(Widget):
         self.stack_b = []
         self.canvas.clear()
         self.iter_moves_list.current = 0
-        self.current_move_id = 0
+        self.current_move_id = -1
         Clock.schedule_once(self.draw_rectangles)
         #self.event_rev = Clock.schedule_interval(self.do_one_move_rev, 1.0/100.0)
 
     def on_pause_status(self, instance, value):
         if value == 0:
             self.event_play = Clock.schedule_interval(
-                self.do_one_move, 1.0/self.speed_ratio)
+                self.do_one_move, 1.0/(2**self.speed_ratio))
         else:
             self.event_play.cancel()
 
@@ -290,7 +301,7 @@ class RectDisplayWidget(Widget):
         if self.pause_status == 0:
             self.event_play.cancel()
             self.event_play = Clock.schedule_interval(
-                    self.do_one_move, 1.0/speed_ratio)
+                    self.do_one_move, 1.0/(2**self.speed_ratio))
 
 
 class PushSwapVizApp(App):
@@ -315,20 +326,20 @@ class PushSwapVizApp(App):
         self.btn_reset = Button(
             text='↺ Reset', size_hint=(.25, 1), size_hint_min_x=dp(80),
             on_press=rect_display.reset_stack)
-        self.slider_speed = Slider(min=1, max=150, pos_hint={'center_y': .55},
-                                   size_hint=(.5, 1), step=10,
-                                   cursor_size=(sp(20), sp(20)),
-                                   value=rect_display.speed_ratio,
-                                   background_width=dp(24))
+        self.slider_speed = Slider(
+            min=0, max=7.2, pos_hint={'center_y': .55}, size_hint=(.5, 1),
+            cursor_size=(sp(20), sp(20)),
+            value=rect_display.speed_ratio, background_width=dp(24))
         self.speed_label = Label(text='Speed', size_hint=(.25, 1))
         self.slider_speed.bind(value=self.on_speed_update)
-        self.progress_label = Label(text='0', size_hint=(.2, 1))
+        self.progress_label = Label(text='START', size_hint=(.2, 1))
         self.moves_label = Label(text='0', size_hint=(.2, 1))
         rect_display.bind(moves_total=self.on_moves_label)
         rect_display.prepare(self.stack_orig, self.moves)
         self.slider_progress = ProgressSlider(
-            min=0, max=rect_display.moves_total - 1, pos_hint={'center_y': .5},
+            min=-1, max=rect_display.moves_total, pos_hint={'center_y': .5},
             step=1, cursor_size=(dp(20), dp(20)),
+            value=rect_display.current_move_id,
             value_track=True, value_track_color=[1, 0, 0, 1],
             value_track_width=dp(2), background_width=dp(24))
         rect_display.bind(current_move_id=self.update_progress_callback)
@@ -358,10 +369,15 @@ class PushSwapVizApp(App):
 
     def update_progress_callback(self, instance, value):
         self.slider_progress.value = value
-        self.progress_label.text = str(int(value))
+        if value == -1:
+            self.progress_label.text = "START"
+        elif value == self.rect_display.moves_total:
+            self.progress_label.text = "END"
+        else:
+            self.progress_label.text = str(int(value))
 
     def release_progress_callback(self, instance):
-        self.rect_display.pause_status = instance.pause_prev  
+        self.rect_display.pause_status = instance.pause_prev
 
     def grab_progress_callback(self, instance):
         instance.pause_prev = self.rect_display.pause_status
@@ -378,20 +394,22 @@ class PushSwapVizApp(App):
         self.create_move_list()
 
     def create_stack(self):
-        self.generate_nblist(self.stack_size)
+        if not self.stack_orig:
+            self.generate_nblist(self.stack_size)
+        self.argv = [str(int) for int in self.stack_orig]
 
     def create_move_list(self):
-        if self.push_swap == "":
+        if self.push_swap is None:
             dirname = os.path.dirname(os.path.abspath(__file__))
             PUSHS_PATH = os.path.join(dirname, RELATIVE_PATH)
         else:
-            PUSHS_PATH = self.push_swap
+            PUSHS_PATH = self.push_swap.resolve()
         try:
             self.moves = \
-                subprocess.run([PUSHS_PATH] + self.argv,
-                               stdout=subprocess.PIPE,
-                               stderr=subprocess.STDOUT,
-                               text=True, timeout=12).stdout.splitlines()
+                subprocess.run(
+                    [PUSHS_PATH] + self.argv,
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    text=True, timeout=12).stdout.splitlines()
         except FileNotFoundError:
             self.moves = []
 
@@ -401,9 +419,8 @@ class PushSwapVizApp(App):
             down = (stack_size // 2)
             self.stack_orig = random.sample(range(-down, up), stack_size)
         else:
-            self.stack_orig = random.sample(range(-stack_size, stack_size),
-                                            stack_size)
-        self.argv = [str(int) for int in self.stack_orig]
+            self.stack_orig = random.sample(
+                range(-stack_size, stack_size), stack_size)
 
     def on_start(self):
         print(' '.join(self.argv))
@@ -431,7 +448,16 @@ class PushSwapVizApp(App):
         if tmp_path.exists():
             return tmp_path
         else:
-            raise argparse.ArgumentTypeError(f"Given Path({path}) is not a valid path.")
+            raise argparse.ArgumentTypeError(f"given Path(\'{path}\') does not exist")
+
+    def stack_size_int(self, x):
+        try:
+            x = int(x)
+        except ValueError:
+            raise argparse.ArgumentTypeError(f"invalid int value: \'{x}\'")
+        if x < 0:
+            raise argparse.ArgumentTypeError("minimum stack size is 0")
+        return x
 
     def parse_cmdline(self, argv):
         self.stack_size = 100
@@ -440,57 +466,18 @@ class PushSwapVizApp(App):
         parser = argparse.ArgumentParser()
         parser.add_argument('integers', metavar='Number', type=int, nargs='*',
                     help='List of custom numbers for push_swap')
-        parser.add_argument("-s", "--stack-size", metavar='size', type=int, default=100,
+        parser.add_argument("-s", "--stack-size", metavar='<size>', type=self.stack_size_int, default=100,
                     help='Size of the stack of number (ex: 3 or 5 or 100 or 500)\
                      default 100.')
         parser.add_argument("-c", "--continuous", action='store_true', default=False,
                     help='The number generated are folowing each other by a "1" increment.')
-        parser.add_argument("-p", "--push-swap", metavar='path', type=self.valid_path,
-                    help='The absolute or relative path to your push_swap folder or binary')
-
+        parser.add_argument("-p", "--push-swap", metavar='<path>', type=self.valid_path,
+                    help='The absolute or relative path to your push_swap binary')
         self.cmdline_args = parser.parse_args()
-        print(self.cmdline_args.integers)
-        print(self.cmdline_args.push_swap)
-        sys.exit(2)
-        """ try:
-            opts, args = getopt.getopt(argv, "hcs:p:",
-                                       ["help", "continous",
-                                        "stack-size=", "push-swap="])
-        except getopt.GetoptError:
-            self.print_usage_exit(2)
-        for opt, arg in opts:
-            if opt in ("-h", "--help"):
-                self.print_usage_exit()
-            elif opt in ("-c", "--continuous"):
-                self.continuous = True
-            elif opt in ("-s", "--stack-size"):
-                try:
-                    self.stack_size = int(arg)
-                    if self.stack_size < 0:
-                        self.print_usage_exit(0)
-                except ValueError:
-                    self.print_usage_exit(2)
-            elif opt in ("-p", "--push-swap"):
-                self.push_swap = arg
-            else:
-                self.print_usage_exit(2) """
-
-    def print_usage_exit(self, status):
-        print('python3 pyviz.py [-c] [-s <stack_size>] [-p <push_swap_path>]\n')
-        print(' -h, --help')
-        print('\tPrint this help dialog\n')
-        print(' -c, --continuous')
-        print('\tThe number generated are folowing each other by a "1" increment.')
-        print('\t\t$ python3 pyviz.py -c -s 4')
-        print('\tWill generate for example the sequence: 0 -1 2 1\n')
-        print(' -s, --stack-size <Integer>')
-        print('\tThe size of the stack of number (ex: 3 or 5 or 100 or 500)')
-        print('\tIf not specified, the default is set to 100.')
-        print('\t\t$ python3 pyviz.py -s 4')
-        print('\tWill generate for example the sequence: 1 0 -3 -2\n')
-        print(' -p, --push-swap <Path>')
-        print('\tThe absolute or relative path to your push_swap binary')
-        sys.exit(status)
+        self.continuous = self.cmdline_args.continuous
+        self.stack_size = self.cmdline_args.stack_size
+        self.push_swap = self.cmdline_args.push_swap
+        self.stack_orig = self.cmdline_args.integers
 
 
 if __name__ == "__main__":
