@@ -22,6 +22,7 @@ from kivy.app import App
 from kivy.clock import Clock
 from kivy.graphics import Color, Rectangle
 from kivy.metrics import sp, dp
+from kivy.core.window import Window
 from kivy.lang import Builder
 from functools import partial
 
@@ -312,6 +313,7 @@ class PushSwapVizApp(App):
         self.title = "push_swap vizualizer"
         self.parse_cmdline(sys.argv[1:])
         self.create_vars()
+        Window.bind(on_key_up=self.key_action)
         self.rect_display = rect_display = RectDisplayWidget()
         rect_display.bind(pause_status=self.play_updt)
         self.btn_play = Button(
@@ -430,6 +432,11 @@ class PushSwapVizApp(App):
 
     def on_moves_label(self, instance, moves_total):
         self.moves_label.text = "{}".format(moves_total)
+
+    def key_action(self, *args):
+        print("got a key event: %s" % list(args))
+        if (args[1] == 32):
+            self.pause_toggle(args[0])
 
     def pause_toggle(self, event):
         if self.rect_display.pause_status:
