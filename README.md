@@ -1,15 +1,16 @@
 # push_swap_viz_kivy
 A push_swap visualizer in python using the kivy library
 
-This python script started as a modification of o-reo python push_swap 
-tkinter visualizer. It is now a complete rewrite using the [kivy library](https://kivy.org/)
+This python script started as a small modification of [o-reo push_swap visualizer](https://github.com/o-reo/push_swap_visualizer) when it was still using python. I ended up doing a complete rewrite using the [python kivy library](https://kivy.org/)
 It is intended to visualize your work with the push_swap 42 Project.
-You need Python3 and kivy installed.
-You can install it with Brew.
 
+You need Python3 and kivy installed.
+
+You can install kivy this way
 ```
 python3 -m pip install "kivy[base]"
 ```
+You can check the [kivy doc](https://kivy.org/doc/stable/gettingstarted/installation.html) for more advanced install (virtualenv...)
 
 Place the script where you want. It will look for the ``push_swap`` binary in the 
 current folder if no path is specified.
