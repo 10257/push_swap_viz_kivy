@@ -42,10 +42,9 @@ __project__ = "push_swap visualizer"
 __author__ = "jgreau"
 __email__ = "jgreau@student.42.fr"
 This python script started as a modification of Emmanuel Ruaud python push_swap 
-tkinter visualizer. It is now a complete rewrite using the kivy framework
+tkinter visualizer. It is now a complete rewrite using the python kivy library.
 It is intended to visualize your work with the push_swap 42 Project.
 You need Python3 and kivy installed.
-You can install it with Brew.
 > python -m pip install "kivy[base]"
 Place the script where you want. It will look for the push_swap binary in the 
 current folder if no path is specified.
@@ -81,7 +80,8 @@ optional arguments:
                         6 (default) - red gradient to black,
                         7 - purple gradient to black,
                         8 - red gradient to white,
-                        9 - white to purple, 10 - sunset
+                        9 - white to purple,
+                        10 - sunset
 """
 
 DEFAULT_PSWAP_PATH = 'push_swap'
@@ -183,21 +183,6 @@ class MoveScrollList(RecycleView):
     def populate(self, moves):
         self.data = [{'text': str(x)} for x in moves]
         self.move_total = len(moves)
-
-    def next_item(self):
-        if self.selected_item < self.move_total - 1:
-            self.selected_item += 1
-        else:
-            return
-        self.scroll_to_index(self.selected_item)
-        self.ids.box.select_node(self.selected_item)
-
-    def prev_item(self):
-        if self.selected_item >= 0:
-            self.ids.box.deselect_node(self.selected_item)
-            self.selected_item -= 1
-        else:
-            return
 
     def clear_selection(self):
         for i in range(self.selected_item + 1):
