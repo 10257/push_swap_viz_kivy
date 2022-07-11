@@ -22,10 +22,11 @@ python3 pswapviz.py -p ../push_swap/push_swap 1 3 2 8 7 5
 ```
 ![pswapviz](https://user-images.githubusercontent.com/4463409/178237182-2c559b7d-a8ad-4b8e-a042-53df358cc17d.png)
 
-- You can adjust speed with the slider.
-- You can use the spacebar to start or stop the visualisation.
-- You can also use left and right arrow to move forward or backward.
-- You can use a slider to skip where you want to in the move list.
+- Adjust speed with the slider.
+- Use the spacebar to start or stop the visualisation.
+- Use left and right arrow to move forward or backward.
+- Use esc key to quit
+- Use the big slider to skip where you want to in the move list.
 
 Here is the full list of command line parameters :
 ```
