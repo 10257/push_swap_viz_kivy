@@ -3,7 +3,6 @@
 
 import os
 import sys
-import getopt
 import random
 import subprocess
 import itertools
@@ -11,7 +10,13 @@ import argparse
 import pathlib
 os.environ["KIVY_NO_ARGS"] = "1"
 os.environ["KIVY_NO_FILELOG"] = "1"
-#os.environ["KIVY_NO_CONSOLELOG"] = "1"
+os.environ["KIVY_NO_CONSOLELOG"] = "1"
+try:
+    from kivy.uix.widget import Widget
+except ImportError:
+    raise ImportError("This script requires Kivy to be installed.\n \
+                    Run this command inside a terminal to install it:\n\
+                    python -m pip install \"kivy[base]\"")
 from kivy.uix.widget import Widget
 from kivy.uix.button import Button
 from kivy.uix.slider import Slider
@@ -19,16 +24,67 @@ from kivy.uix.label import Label
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.recycleview import RecycleView
 from kivy.uix.recycleview.views import RecycleDataViewBehavior
+from kivy.uix.recycleboxlayout import RecycleBoxLayout
+from kivy.uix.behaviors import FocusBehavior
+from kivy.uix.recycleview.layout import LayoutSelectionBehavior
 from kivy.properties import NumericProperty
-from kivy.properties import ListProperty
+from kivy.properties import BooleanProperty
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.graphics import Color, Rectangle
 from kivy.metrics import sp, dp
 from kivy.core.window import Window
 from kivy.lang import Builder
-from kivy.animation import Animation
-from functools import partial
+
+
+"""
+__project__ = "push_swap visualizer"
+__author__ = "jgreau"
+__email__ = "jgreau@student.42.fr"
+This python script started as a modification of Emmanuel Ruaud python push_swap 
+tkinter visualizer. It is now a complete rewrite using the kivy framework
+It is intended to visualize your work with the push_swap 42 Project.
+You need Python3 and kivy installed.
+You can install it with Brew.
+> python -m pip install "kivy[base]"
+Place the script where you want. It will look for the push_swap binary in the 
+current folder if no path is specified.
+Launch the script with :
+> python3 pswapviz.py
+> python3 pswapviz.py -p ../push_swap/push_swap -s 500
+> python3 pswapviz.py -p ../push_swap/push_swap 1 3 2 8 7 5
+You can adjust speed with the slider.
+You can use the spacebar to start or stop the visualisation.
+You can also use left and right arrow to move forward or backward.
+You can use a slider to skip where you want to in the move list.
+Here is the full list of command line parameters :
+usage: pswapviz.py [-h] [-s <size>] [-c] [-p <path>] [-g <id>] [Numbers ...]
+
+positional arguments:
+  Numbers               A List of numbers for push_swap to sort (optional)
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -s <size>, --stack-size <size>
+                        Size of the stack of number (ex: 3 or 5 or 100 or 500) default 100.
+  -c, --continuous      The number generated are folowing each other by a "1" increment.
+  -p <path>, --push-swap <path>
+                        The absolute or relative path to your push_swap binary. 
+                        if the path is not specified, look for push_swap in the current dir.
+  -g <id>, --gradient <id>
+                        Chose a color gradient to use (value between 1 and 10). 
+                        1 - rainbow blue to red,
+                        2 - rainbow purple to red,
+                        3 - black and white dark,
+                        4 - black and white light,
+                        5 - White to black,
+                        6 (default) - red gradient to black,
+                        7 - purple gradient to black,
+                        8 - red gradient to white,
+                        9 - white to purple, 10 - sunset
+"""
+
+DEFAULT_PSWAP_PATH = 'push_swap'
 
 
 KV = '''
@@ -38,7 +94,7 @@ KV = '''
 <MoveLabel>
     canvas.before:
         Color:
-            hsv: self.bg_color
+            hsv: (0, 0, 0.7) if self.selected else (0, 0, 0.45)
         Rectangle:
             size: self.size
             pos: self.pos
@@ -49,7 +105,8 @@ KV = '''
     scroll_type: ['bars']
     scroll_wheel_distance: dp(114)
     bar_width: dp(10)
-    RecycleBoxLayout:
+    effect_cls: "ScrollEffect"
+    SelectableRecycleBoxLayout:
         id: box
         orientation: 'vertical'
         size_hint_y: None
@@ -57,10 +114,9 @@ KV = '''
         default_size: 0, dp(20)
         height: self.minimum_height
         spacing: dp(2)
+        multiselect: True
+        touch_multiselect: False
 '''
-
-
-RELATIVE_PATH = r'push_swap'
 
 
 class StackRectangle:
@@ -95,31 +151,70 @@ class IterMoveList:
         return move
 
 
+class SelectableRecycleBoxLayout(
+    FocusBehavior, LayoutSelectionBehavior, RecycleBoxLayout
+):
+    """ Adds selection and focus behaviour to the view. """
+
+
 class MoveLabel(RecycleDataViewBehavior, Label):
-    bg_color = ListProperty([0, 0, 0.45])
-    index = 0
+    index = None
+    selected = BooleanProperty(False)
+    selectable = BooleanProperty(True)
 
     def refresh_view_attrs(self, rv, index, data):
         #print(index, data)
         self.index = index
-        if data['active']:
-            self.bg_color = [0, 0, 0.7]
-        else:
-            self.bg_color = [0, 0, 0.45]
         super(MoveLabel, self).refresh_view_attrs(rv, index, data)
+
+    def apply_selection(self, rv, index, is_selected):
+        """ Respond to the selection of items in the view. """
+        self.selected = is_selected
+        # if is_selected:
+        #     print("selection changed to {0}".format(rv.data[index]))
+        # else:
+        #     print("selection removed for {0}".format(rv.data[index]))
 
 
 class MoveScrollList(RecycleView):
     moves_total = 0
+    selected_item = -1
 
     def populate(self, moves):
-        self.data = [{'text': str(x), 'active': False} for x in moves]
+        self.data = [{'text': str(x)} for x in moves]
         self.move_total = len(moves)
+
+    def next_item(self):
+        if self.selected_item < self.move_total - 1:
+            self.selected_item += 1
+        else:
+            return
+        self.scroll_to_index(self.selected_item)
+        self.ids.box.select_node(self.selected_item)
+
+    def prev_item(self):
+        if self.selected_item >= 0:
+            self.ids.box.deselect_node(self.selected_item)
+            self.selected_item -= 1
+        else:
+            return
+
+    def clear_selection(self):
+        for i in range(self.selected_item + 1):
+            self.ids.box.deselect_node(i)
+        self.selected_item = -1
+
+    def select_item(self, index):
+        self.selected_item = index
+        self.ids.box.select_node(index)
+
+    def deselect_item(self, index):
+        self.selected_item = index
+        self.ids.box.deselect_node(index)
 
     def scroll_to_index(self, index):
         box = self.children[0]
         pos_index = (box.default_size[1] + box.spacing) * index
-        #print(pos_index)
         scroll = self.convert_distance_to_scroll(
             0, pos_index - (self.height * 0.5))[1]
         if scroll > 1.0:
@@ -179,13 +274,14 @@ class RectDisplayWidget(Widget):
     speed_ratio = NumericProperty(5.0)
     moves_total = NumericProperty(0)
     current_move_id = NumericProperty(-1)
+    gradient = NumericProperty(0)
 
     def __init__(self, **kwargs):
-        #self.register_event_type('on_end_reached')
         self.stack_a = []
         self.stack_b = []
         self.stack_len = 0
         self.max, self.min = (0, 0)
+        self.gradient = kwargs['gradient']
         self._resize_trigger = Clock.create_trigger(self._resize_rect, -1)
         self._move_trigger = Clock.create_trigger(self._move_rect, -1)
         super(RectDisplayWidget, self).__init__(**kwargs)
@@ -202,14 +298,36 @@ class RectDisplayWidget(Widget):
             self.min = min(stack)
         Clock.schedule_once(self.draw_rectangles)
 
-    def set_color(self, rank):
-        # c = Color((1 - rank)/1.5, 1, 0.85, mode='hsv')
-        #c = Color((1 - rank)/1.25, 1, 1, mode='hsv')  # gradient sympa
-        # c = Color(0, 0, (1 - rank)/1.5, mode='hsv') # black and white pas lisible
-        #c = Color(0, 0, 1 - (rank/1.25), mode='hsv') # good black and white
-        #c = Color(0, 0, (rank/1.5) + 0.25, mode='hsv') #black and white reverse
-        c = Color(1, .75, 1 - (rank/1.25), mode='hsv') #one color gradient to black
-        #c = Color(((rank)/1.25) + 0.25, (1 - rank)/1.25, (1 - rank)/1.25, mode='hsv') #not good
+    def set_color(self, rank, gradient):
+        if gradient == 1:
+            # rainbow blue to red
+            return Color((1 - rank)/1.5, 1, 0.85, mode='hsv')
+        if gradient == 2:
+            # rainbow purple to red gradient sympa
+            return Color((1 - rank)/1.25, 1, 0.85, mode='hsv')
+        if gradient == 3:
+            # black and white pas lisible
+            return Color(0, 0, (1 - rank)/1.5, mode='hsv')
+        if gradient == 4:
+            # good black and white
+            return Color(0, 0, 1 - (rank/1.25), mode='hsv')
+        if gradient == 5:
+            # black and white reverse
+            return Color(0, 0, (rank/1.5) + 0.25, mode='hsv')
+        if gradient == 6:
+            # red gradient to black
+            return Color(1, .75, 1 - (rank/1.25), mode='hsv')
+        if gradient == 7:
+            # purple gradient to black
+            return Color(0.75, .75, 1 - (rank/1.25), mode='hsv')
+        if gradient == 8:
+            # red gradient to white
+            return Color(1, 1 - (rank/1.25), 1, mode='hsv')
+        if gradient == 9:
+            # white to purple
+            return Color(0.75, (rank/1.5), 0.8, mode='hsv')
+        # sunset
+        c = Color((1-rank)/1.25, (rank)/1.1, (rank)/1.25, mode='hsv')
         return c
 
     def get_rect_pos(self, pos_x, iter_y):
@@ -230,7 +348,7 @@ class RectDisplayWidget(Widget):
             with self.canvas:
                 for num in self.stack_orig:
                     rank = self.get_rank(num)
-                    self.set_color(rank)
+                    self.set_color(rank, self.gradient)
                     rect = StackRectangle(num, rank,
                                           self.get_rect_pos(0, offset),
                                           self.get_rect_size(rank))
@@ -318,30 +436,26 @@ class RectDisplayWidget(Widget):
         try:
             move = self.iter_moves_list.next()
             self.do_move(move[1])
-            move_list = App.get_running_app().move_list
-            move_list.data[move[0]]['active'] = True
+            App.get_running_app().move_list.select_item(move[0])
             self.current_move_id = move[0]
         except StopIteration:
-            #self.dispatch('on_end_reached')
             self.pause_status = 1
             self.current_move_id = self.moves_total
         self._move_trigger()
-        #print('FPS: %2.4f (real draw: %d) (dt: %2.4f)' % (
+        # print('FPS: %2.4f (real draw: %d) (dt: %2.4f)' % (
         #    Clock.get_fps(), Clock.get_rfps(), dt))
 
     def do_one_move_rev(self, dt, *largs):
         try:
             move = self.iter_moves_list.prev()
             self.do_move_rev(move[1])
-            move_list = App.get_running_app().move_list
-            move_list.data[move[0]]['active'] = False
+            App.get_running_app().move_list.deselect_item(move[0])
             self.current_move_id = move[0]
         except StopIteration:
             self.pause_status = 1
             self.current_move_id = -1
-            #self.dispatch('on_end_reached')
         self._move_trigger()
-        #print('FPS: %2.4f (real draw: %d) (dt: %2.4f)' % (
+        # print('FPS: %2.4f (real draw: %d) (dt: %2.4f)' % (
         #    Clock.get_fps(), Clock.get_rfps(), dt))
 
     def do_multi_move(self, limit):
@@ -351,7 +465,7 @@ class RectDisplayWidget(Widget):
             for _ in itertools.repeat(None, count):
                 move = self.iter_moves_list.next()
                 self.do_move(move[1])
-                move_list.data[move[0]]['active'] = True
+                move_list.select_item(move[0])
             self.current_move_id = move[0]
         except StopIteration:
             self.current_move_id = self.moves_total
@@ -364,7 +478,7 @@ class RectDisplayWidget(Widget):
             for _ in itertools.repeat(None, count):
                 move = self.iter_moves_list.prev()
                 self.do_move_rev(move[1])
-                move_list.data[move[0]]['active'] = False
+                move_list.deselect_item(move[0])
             self.current_move_id = move[0]
         except StopIteration:
             self.current_move_id = -1
@@ -378,11 +492,9 @@ class RectDisplayWidget(Widget):
         self.iter_moves_list.current = 0
         self.current_move_id = -1
         move_list = App.get_running_app().move_list
-        for item in move_list.data:
-            item['active'] = False
+        move_list.clear_selection()
         move_list.scroll_to_index(0)
         Clock.schedule_once(self.draw_rectangles)
-        #self.event_rev = Clock.schedule_interval(self.do_one_move_rev, 1.0/100.0)
 
     def on_pause_status(self, instance, value):
         if value == 0:
@@ -407,7 +519,7 @@ class PushSwapVizApp(App):
         self.parse_cmdline(sys.argv[1:])
         self.create_vars()
         Window.bind(on_key_up=self.key_action)
-        self.rect_display = rect_display = RectDisplayWidget(size_hint=(1, 1))
+        self.rect_display = rect_display = RectDisplayWidget(size_hint=(1, 1), gradient=self.gradient)
         rect_display.bind(pause_status=self.play_updt)
         self.btn_play = Button(
             text='▶', size_hint=(.2, 1), size_hint_min_x=dp(50),
@@ -501,19 +613,15 @@ class PushSwapVizApp(App):
         self.argv = [str(int) for int in self.stack_orig]
 
     def create_move_list(self):
-        if self.push_swap is None:
-            dirname = os.path.dirname(os.path.abspath(__file__))
-            PUSHS_PATH = os.path.join(dirname, RELATIVE_PATH)
-        else:
-            PUSHS_PATH = self.push_swap.resolve()
+        pswap_path = self.push_swap.resolve()
         try:
-            self.moves = \
-                subprocess.run(
-                    [PUSHS_PATH] + self.argv,
-                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                    text=True, timeout=12).stdout.splitlines()
+            self.moves = subprocess.run(
+                [pswap_path] + self.argv, capture_output=True, check=True,
+                text=True, timeout=12).stdout.splitlines()
         except FileNotFoundError:
-            self.moves = []
+            #self.moves = []
+            print("push_swap not found! Use -p to provide a path to push_swap.")
+            sys.exit(1)
 
     def generate_nblist(self, stack_size):
         if self.continuous:
@@ -534,7 +642,7 @@ class PushSwapVizApp(App):
         self.moves_label.text = "{}".format(moves_total)
 
     def key_action(self, *args):
-        #print("got a key event: %s" % list(args))
+        # print("got a key event: %s" % list(args))
         if (args[1] == 32):
             self.pause_toggle(args[0])
         elif (args[1] == 275):
@@ -575,20 +683,35 @@ class PushSwapVizApp(App):
         self.push_swap = ""
         self.continuous = False
         parser = argparse.ArgumentParser()
-        parser.add_argument('integers', metavar='Number', type=int, nargs='*',
-                    help='List of custom numbers for push_swap')
+        parser.add_argument('integers', metavar='Numbers', type=int, nargs='*',
+                    help='A List of numbers for push_swap to sort (optional)')
         parser.add_argument("-s", "--stack-size", metavar='<size>', type=self.stack_size_int, default=100,
                     help='Size of the stack of number (ex: 3 or 5 or 100 or 500)\
                      default 100.')
         parser.add_argument("-c", "--continuous", action='store_true', default=False,
                     help='The number generated are folowing each other by a "1" increment.')
         parser.add_argument("-p", "--push-swap", metavar='<path>', type=self.valid_path,
-                    help='The absolute or relative path to your push_swap binary')
+                    help='The absolute or relative path to your push_swap binary. \
+                    if the path is not specified, look for push_swap in the current dir.')
+        parser.add_argument("-g", "--gradient", metavar='<id>', default='6',
+                    choices=['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'],
+                    help="Chose a color gradient to use (value between 1 and 10). \
+                    1 - rainbow blue to red, 2 - rainbow purple to red, 3 - black and white dark, \
+                    4 - black and white light, 5 - White to black, 6 (default) - red gradient to black, \
+                    7 - purple gradient to black, 8 - red gradient to white, 9 - white to purple, 10 - sunset")
         self.cmdline_args = parser.parse_args()
         self.continuous = self.cmdline_args.continuous
         self.stack_size = self.cmdline_args.stack_size
         self.push_swap = self.cmdline_args.push_swap
         self.stack_orig = self.cmdline_args.integers
+        self.gradient = self.cmdline_args.gradient
+        if self.push_swap is None:
+            tmp_path = pathlib.Path(DEFAULT_PSWAP_PATH)
+            if tmp_path.exists():
+                self.push_swap = tmp_path
+            else:
+                parser.print_help()
+                sys.exit(1)
 
 
 if __name__ == "__main__":
