@@ -17,19 +17,46 @@ from kivy.uix.button import Button
 from kivy.uix.slider import Slider
 from kivy.uix.label import Label
 from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.recycleview import RecycleView
+from kivy.uix.recycleview.views import RecycleDataViewBehavior
 from kivy.properties import NumericProperty
+from kivy.properties import ListProperty
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.graphics import Color, Rectangle
 from kivy.metrics import sp, dp
 from kivy.core.window import Window
 from kivy.lang import Builder
+from kivy.animation import Animation
 from functools import partial
 
 
 KV = '''
 <Label>:
     font_name: 'DejaVuSans'
+
+<MoveLabel>
+    canvas.before:
+        Color:
+            hsv: self.bg_color
+        Rectangle:
+            size: self.size
+            pos: self.pos
+
+<MoveScrollList>:
+    viewclass: 'MoveLabel'
+    do_scroll_x: False
+    scroll_type: ['bars']
+    scroll_wheel_distance: dp(114)
+    bar_width: dp(10)
+    RecycleBoxLayout:
+        id: box
+        orientation: 'vertical'
+        size_hint_y: None
+        default_size_hint: 1, None
+        default_size: 0, dp(20)
+        height: self.minimum_height
+        spacing: dp(2)
 '''
 
 
@@ -68,6 +95,60 @@ class IterMoveList:
         return move
 
 
+class MoveLabel(RecycleDataViewBehavior, Label):
+    bg_color = ListProperty([0, 0, 0.45])
+    index = 0
+
+    def refresh_view_attrs(self, rv, index, data):
+        #print(index, data)
+        self.index = index
+        if data['active']:
+            self.bg_color = [0, 0, 0.7]
+        else:
+            self.bg_color = [0, 0, 0.45]
+        super(MoveLabel, self).refresh_view_attrs(rv, index, data)
+
+
+class MoveScrollList(RecycleView):
+    moves_total = 0
+
+    def populate(self, moves):
+        self.data = [{'text': str(x), 'active': False} for x in moves]
+        self.move_total = len(moves)
+
+    def scroll_to_index(self, index):
+        box = self.children[0]
+        pos_index = (box.default_size[1] + box.spacing) * index
+        #print(pos_index)
+        scroll = self.convert_distance_to_scroll(
+            0, pos_index - (self.height * 0.5))[1]
+        if scroll > 1.0:
+            scroll = 1.0
+        elif scroll < 0.0:
+            scroll = 0.0
+        self.scroll_y = 1.0 - scroll
+
+    def convert_distance_to_scroll(self, dx, dy):
+        box = self.children[0]
+        wheight = box.default_size[1] + box.spacing
+
+        if not self._viewport:
+            return 0, 0
+        vp = self._viewport
+        vp_height = self.move_total * wheight
+        if vp.width > self.width:
+            sw = vp.width - self.width
+            sx = dx / float(sw)
+        else:
+            sx = 0
+        if vp_height > self.height:
+            sh = vp_height - self.height
+            sy = dy / float(sh)
+        else:
+            sy = 1
+        return sx, sy
+
+
 class ProgressSlider(Slider):
     def __init__(self, **kwargs):
         self.register_event_type('on_release')
@@ -82,15 +163,15 @@ class ProgressSlider(Slider):
 
     def on_touch_down(self, touch):
         super(ProgressSlider, self).on_touch_down(touch)
-        if touch.grab_current != self:
+        if touch.grab_current != self and self.collide_point(*touch.pos):
             self.dispatch('on_grab')
-            return True
+            return False
 
     def on_touch_up(self, touch):
         super(ProgressSlider, self).on_touch_up(touch)
-        if touch.grab_current == self:
+        if touch.grab_current == self and self.collide_point(*touch.pos):
             self.dispatch('on_release')
-            return True
+            return False
 
 
 class RectDisplayWidget(Widget):
@@ -237,6 +318,8 @@ class RectDisplayWidget(Widget):
         try:
             move = self.iter_moves_list.next()
             self.do_move(move[1])
+            move_list = App.get_running_app().move_list
+            move_list.data[move[0]]['active'] = True
             self.current_move_id = move[0]
         except StopIteration:
             #self.dispatch('on_end_reached')
@@ -250,6 +333,8 @@ class RectDisplayWidget(Widget):
         try:
             move = self.iter_moves_list.prev()
             self.do_move_rev(move[1])
+            move_list = App.get_running_app().move_list
+            move_list.data[move[0]]['active'] = False
             self.current_move_id = move[0]
         except StopIteration:
             self.pause_status = 1
@@ -262,9 +347,11 @@ class RectDisplayWidget(Widget):
     def do_multi_move(self, limit):
         try:
             count = limit - self.current_move_id
+            move_list = App.get_running_app().move_list
             for _ in itertools.repeat(None, count):
                 move = self.iter_moves_list.next()
                 self.do_move(move[1])
+                move_list.data[move[0]]['active'] = True
             self.current_move_id = move[0]
         except StopIteration:
             self.current_move_id = self.moves_total
@@ -273,9 +360,11 @@ class RectDisplayWidget(Widget):
     def do_multi_move_rev(self, limit):
         try:
             count = self.current_move_id - limit
+            move_list = App.get_running_app().move_list
             for _ in itertools.repeat(None, count):
                 move = self.iter_moves_list.prev()
                 self.do_move_rev(move[1])
+                move_list.data[move[0]]['active'] = False
             self.current_move_id = move[0]
         except StopIteration:
             self.current_move_id = -1
@@ -288,6 +377,10 @@ class RectDisplayWidget(Widget):
         self.canvas.clear()
         self.iter_moves_list.current = 0
         self.current_move_id = -1
+        move_list = App.get_running_app().move_list
+        for item in move_list.data:
+            item['active'] = False
+        move_list.scroll_to_index(0)
         Clock.schedule_once(self.draw_rectangles)
         #self.event_rev = Clock.schedule_interval(self.do_one_move_rev, 1.0/100.0)
 
@@ -314,7 +407,7 @@ class PushSwapVizApp(App):
         self.parse_cmdline(sys.argv[1:])
         self.create_vars()
         Window.bind(on_key_up=self.key_action)
-        self.rect_display = rect_display = RectDisplayWidget()
+        self.rect_display = rect_display = RectDisplayWidget(size_hint=(1, 1))
         rect_display.bind(pause_status=self.play_updt)
         self.btn_play = Button(
             text='▶', size_hint=(.2, 1), size_hint_min_x=dp(50),
@@ -349,6 +442,12 @@ class PushSwapVizApp(App):
         self.slider_progress.bind(on_release=self.release_progress_callback)
         self.slider_progress.bind(on_grab=self.grab_progress_callback)
 
+        self.move_list = MoveScrollList(size_hint=(.15, 1), size_hint_max_x=dp(50))
+        self.move_list.populate(self.moves)
+
+        central_pane = BoxLayout()
+        central_pane.add_widget(rect_display)
+        central_pane.add_widget(self.move_list)
         progress_pane = BoxLayout(
             size_hint=(1, None), height=dp(30), spacing=dp(2))
         progress_pane.add_widget(self.progress_label)
@@ -363,7 +462,7 @@ class PushSwapVizApp(App):
         ctrl_btns.add_widget(self.speed_label)
         ctrl_btns.add_widget(self.slider_speed)
         self.root = root = BoxLayout(orientation='vertical')
-        root.add_widget(rect_display)
+        root.add_widget(central_pane)
         root.add_widget(progress_pane)
         root.add_widget(ctrl_btns)
 
@@ -376,6 +475,7 @@ class PushSwapVizApp(App):
         elif value == self.rect_display.moves_total:
             self.progress_label.text = "END"
         else:
+            self.move_list.scroll_to_index(int(value))
             self.progress_label.text = str(int(value))
 
     def release_progress_callback(self, instance):
@@ -434,9 +534,13 @@ class PushSwapVizApp(App):
         self.moves_label.text = "{}".format(moves_total)
 
     def key_action(self, *args):
-        print("got a key event: %s" % list(args))
+        #print("got a key event: %s" % list(args))
         if (args[1] == 32):
             self.pause_toggle(args[0])
+        elif (args[1] == 275):
+            self.rect_display.do_one_move(args[0])
+        elif (args[1] == 276):
+            self.rect_display.do_one_move_rev(args[0])
 
     def pause_toggle(self, event):
         if self.rect_display.pause_status:
