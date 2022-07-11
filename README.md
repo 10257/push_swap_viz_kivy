@@ -26,7 +26,7 @@ python3 pswapviz.py -p ../push_swap/push_swap 1 3 2 8 7 5
 - Use the spacebar to start or stop the visualisation.
 - Use left and right arrow to move forward or backward.
 - Use esc key to quit
-- Use the big slider to skip where you want to in the move list.
+- Use the big slider to skip where you want in the move list.
 
 Here is the full list of command line parameters :
 ```
