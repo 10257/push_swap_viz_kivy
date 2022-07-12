@@ -1,28 +1,36 @@
 # push_swap_viz_kivy
 A push_swap visualizer in python using the kivy library
 
-This python script started as a small modification of [o-reo push_swap visualizer](https://github.com/o-reo/push_swap_visualizer) when it was still using python. I ended up doing a complete rewrite using the [python kivy library](https://kivy.org/)
-It is intended to visualize your work with the push_swap 42 Project.
+This python script started as a small modification of [o-reo push_swap visualizer](https://github.com/o-reo/push_swap_visualizer) when it was still using python.
 
-You need Python3 and kivy installed.
+I ended up doing a complete rewrite using the [python kivy library](https://kivy.org/).
 
-You can install kivy this way
+This script is intended to visualize your work with the push_swap 42 project.
+
+You need Python3 and kivy installed. You can install kivy this way:
 ```
 python3 -m pip install "kivy[base]"
 ```
-You can check the [kivy doc](https://kivy.org/doc/stable/gettingstarted/installation.html) for more advanced install (virtualenv...)
+You can check the [kivy doc](https://kivy.org/doc/stable/gettingstarted/installation.html) for more advanced install steps (virtualenv...)
 
 Place the script where you want. It will look for the ``push_swap`` binary in the 
 current folder if no path is specified.
 
-Launch the script with :
+You can launch the script with :
 ```
 python3 pswapviz.py
+```
+or this way if you want to point to a custom path for your push_swap binary with a 500 number stack
+```
 python3 pswapviz.py -p ../push_swap/push_swap -s 500
+```
+or this way if you want to give manually a specific list of numbers
+```
 python3 pswapviz.py -p ../push_swap/push_swap 1 3 2 8 7 5
 ```
 ![pswapviz](https://user-images.githubusercontent.com/4463409/178237182-2c559b7d-a8ad-4b8e-a042-53df358cc17d.png)
 
+In the interface you can:
 - Adjust speed with the slider.
 - Use the spacebar to start or stop the visualisation.
 - Use left and right arrow to move forward or backward.
