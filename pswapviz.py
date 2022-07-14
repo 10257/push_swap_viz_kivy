@@ -42,7 +42,7 @@ __project__ = "push_swap visualizer"
 __author__ = "jgreau"
 __email__ = "jgreau@student.42.fr"
 This python script started as a modification of Emmanuel Ruaud python push_swap 
-tkinter visualizer. It is now a complete rewrite using the python kivy library.
+tkinter visualizer. I ended up doing a complete rewrite using the python kivy library.
 It is intended to visualize your work with the push_swap 42 Project.
 You need Python3 and kivy installed.
 > python -m pip install "kivy[base]"
@@ -50,11 +50,14 @@ Place the script where you want. It will look for the push_swap binary in the
 current folder if no path is specified.
 Launch the script with :
 > python3 pswapviz.py
+or
 > python3 pswapviz.py -p ../push_swap/push_swap -s 500
+or
 > python3 pswapviz.py -p ../push_swap/push_swap 1 3 2 8 7 5
 You can adjust speed with the slider.
 You can use the spacebar to start or stop the visualisation.
 You can also use left and right arrow to move forward or backward.
+You can use the esc key to quit
 You can use a slider to skip where you want to in the move list.
 Here is the full list of command line parameters :
 usage: pswapviz.py [-h] [-s <size>] [-c] [-p <path>] [-g <id>] [Numbers ...]
@@ -163,7 +166,6 @@ class MoveLabel(RecycleDataViewBehavior, Label):
     selectable = BooleanProperty(True)
 
     def refresh_view_attrs(self, rv, index, data):
-        #print(index, data)
         self.index = index
         super(MoveLabel, self).refresh_view_attrs(rv, index, data)
 
@@ -606,6 +608,12 @@ class PushSwapVizApp(App):
         except FileNotFoundError:
             #self.moves = []
             print("push_swap not found! Use -p to provide a path to push_swap.")
+            sys.exit(1)
+        except subprocess.CalledProcessError as e:
+            print("There was an error during the execution of push_swap (segfault maybe?) with the following stack:\n")
+            self.on_start()
+            print("\nHere are some messages that might help you correct the error:\n")
+            print(e)
             sys.exit(1)
 
     def generate_nblist(self, stack_size):
