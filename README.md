@@ -1,4 +1,4 @@
-# push_swap_viz_kivy
+# Another Push_swap visualizer (python + kivy)
 A push_swap visualizer in python using the kivy library
 
 This python script started as a small modification of [o-reo push_swap visualizer](https://github.com/o-reo/push_swap_visualizer) when it was still using python.
